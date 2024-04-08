@@ -334,8 +334,8 @@ QUERY_COMMANDS = {
         "help": " -- queries enable/disable flag status from the Inverter",
         "type": "QUERY",
         "response": [
-            ["option", "Mute buzzer beep", ["OFF", "ON"], {"subscribe":"PA", "ON":"PA1", "OFF":"PA0", "device-class": "outlet"}],
-            ["option", "Mute buzzer beep in standby mode", ["OFF", "ON"]],
+            ["option", "Mute buzzer beep", ["disable", "enable"], {"control":{ "type":"switch", "sub":"PA", "ON":"PEA", "OFF":"PDA"}, "device-class": "outlet"}],
+            ["option", "Mute buzzer beep in standby mode", ["disable", "enable"]],
             [
                 "option",
                 "Mute buzzer beep only on battery discharged status",

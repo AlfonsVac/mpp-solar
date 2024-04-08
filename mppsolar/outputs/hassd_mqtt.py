@@ -16,6 +16,7 @@ class hassd_mqtt(mqtt):
 
     def __init__(self, *args, **kwargs) -> None:
         log.debug(f"__init__: kwargs {kwargs}")
+        self.extra_commands = []
 
     def build_msgs(self, *args, **kwargs):
         log.debug(f"kwargs {kwargs}")
@@ -75,21 +76,25 @@ class hassd_mqtt(mqtt):
         for key, values in data.items():
             orig_key = key
             value = values[0]
-            print(values)
+
+            #For unit in protocol
             unit = values[1]
             if len(values) > 2 and values[2] and "unit" in values[2]:
                 unit = values[2]["unit"]
 
+            #For number base in protocol
             base = None
             if len(values) > 2 and values[2] and "unit" in values[2]:
                 base = values[2]["base"]
                 value = round(value*base, 2)
-                
+
+            #For icon in protocol   
             icon = None
             if len(values) > 2 and values[2] and "icon" in values[2]:
                 icon = values[2]["icon"]
             device_class = None
 
+            #For device class in protocol
             if len(values) > 2 and values[2] and "device-class" in values[2]:
                 device_class = values[2]["device-class"]
             state_class = None
@@ -103,14 +108,8 @@ class hassd_mqtt(mqtt):
                 # make lowercase
                 key = key.lower()
             if key_wanted(key, filter, excl_filter):
-                #
-                # CONFIG / AUTODISCOVER
-                #
-                # <discovery_prefix>/<component>/[<node_id>/]<object_id>/config
-                # topic "homeassistant/binary_sensor/garden/config"
-                # msg '{"name": "garden", "device_class": "motion", "state_topic": "homeassistant/binary_sensor/garden/state", "unit_of_measurement": "°C", "icon": "power-plug"}'
 
-                # For binary sensors
+                                # For binary sensors
                 if unit == "bool" or value == "enabled" or value == "disabled":
                     sensor = "binary_sensor"
                     if value == 0 or value == "0" or value == "disabled":
@@ -120,19 +119,21 @@ class hassd_mqtt(mqtt):
                         value = "ON"
                 else:
                     sensor = "sensor"
+
                 topic = f"homeassistant/{sensor}/mpp_{tag}_{key}/config"
                 topic = topic.replace(" ", "_")
-                name = f"{tag} {orig_key}"
+                name = f"{orig_key}"
                 payload = {
                     "name": f"{name}",
                     "state_topic": f"homeassistant/{sensor}/mpp_{tag}_{key}/state",
                     "unique_id": f"mpp_{tag}_{key}",
                     "force_update": "true",
+                    "expire_after":180,
                 }
                 if unit and unit != "bool":
                     payload["unit_of_measurement"] = f"{unit}"
 
-                # payload["device"] = {"name": f"{device_name}", "identifiers": ["mppsolar"], "model": "PIP6048MAX", "manufacturer": "MPP-Solar"}
+                # payload["device"] = {"name": f"{device_name}", "identifiers": ["mppsolar"], "model": "PIP6048MAX", "manufacturer": "MPP-Solar" ...}
                 payload["device"] = {
                     "name": device_name,
                     "identifiers": [device_id],
@@ -158,6 +159,26 @@ class hassd_mqtt(mqtt):
                         }
                     )
 
+                if len(values) > 2 and values[2] and "control" in values[2]:
+
+                        mqtt_broker = get_kwargs(kwargs, "mqtt_broker")
+                        setting = values[2]["control"]
+                        # exit if no broker
+                        if mqtt_broker is not None:
+
+                            topic = topic.replace(sensor, setting["type"])
+                            sensor = "switch"
+                            sub_topic = topic.replace("config", "set")
+                            payload.update({
+                                "state_topic": topic.replace("config", "state"),
+                                "payload_off" : setting['OFF'],
+                                "payload_on" : setting['ON'],
+                                "command_topic" : sub_topic,
+                            })
+                            
+                            payload.pop("expire_after")
+                            mqtt_broker.subscribe(sub_topic, self.subscribed_topics)
+
                 # msg = {"topic": topic, "payload": payload, "retain": True}
                 payloads = js.dumps(payload)
                 # print(payloads)
@@ -167,11 +188,14 @@ class hassd_mqtt(mqtt):
                 # VALUE SETTING
                 #
                 # 'tag'/status/total_output_active_power/value 1250
-                # 'tag'/status/total_output_active_power/unit W
                 topic = f"homeassistant/{sensor}/mpp_{tag}_{key}/state"
                 msg = {"topic": topic, "payload": value}
                 value_msgs.append(msg)
         return config_msgs, value_msgs
+    
+    def subscribed_topics(self, client, userdata, message):
+        print(message.payload.decode("utf-8"))
+        self.extra_commands.append(message.payload.decode("utf-8"))
 
     def output(self, *args, **kwargs):
         """Over write mqtt output as we want to send config msgs first...."""
