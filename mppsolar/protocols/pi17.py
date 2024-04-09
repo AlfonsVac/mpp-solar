@@ -872,7 +872,7 @@ SETTER_COMMANDS = {
     "BCA":{
         "name":"BCA",
         "description":" Set battery charger application in floating charging",
-        "help": "--examples: BCA0000,060,0530 - set stop charger current level at 0 Amps, wait at least 60 minutes before recharging, recover to charge when battery stop charger in floating charging below 530",
+        "help": "--examples: BCA0000,060,0530 - set stop charger current level at 0A  (0.1 A), wait at least 60 minutes before recharging, recover to charge when battery stop charger in floating charging below 53V (0.1 V)",
         "type":"SETTER",
         "response": [
             ["ack", "Command execution", {"NAK": "Failed", "ACK": "Successful"}],
