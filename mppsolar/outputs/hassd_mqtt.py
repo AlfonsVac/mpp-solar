@@ -18,6 +18,64 @@ class hassd_mqtt(mqtt):
         log.debug(f"__init__: kwargs {kwargs}")
         self.extra_commands = []
 
+    def send_extra(self, *args, **kwargs):
+        # check if config supplied
+        config = get_kwargs(kwargs, "config")
+        if config is not None:
+            log.debug(f"config: {config}")
+            # try for fullconfig
+            fullconfig = get_kwargs(kwargs, "fullconfig")
+            # get results topic
+            # results_topic = config.get("results_topic", None)
+            # get formatting info
+            remove_spaces = config.get("remove_spaces", True)
+            keep_case = config.get("keep_case", False)
+            tag = config.get("tag", None)
+            device = fullconfig.get("device", {})
+            device_name = device.get("name", "mppsolar")
+            device_id = device.get("id", "mppsolar")
+            device_model = device.get("model", "mppsolar")
+            device_manufacturer = device.get("manufacturer", "mppsolar")
+        else:
+            # results_topic = None
+            # get formatting info
+            remove_spaces = True
+            keep_case = get_kwargs(kwargs, "keep_case")
+            tag = get_kwargs(kwargs, "tag")
+            device_name = get_kwargs(kwargs, "name", "mppsolar")
+            device_id = device_name
+            device_model = device_name
+            device_manufacturer = "MPP-Solar"
+
+        orig_key = "Get settings entities"
+        key = orig_key
+        # remove spaces
+        if remove_spaces:
+            key = key.replace(" ", "_")
+        if not keep_case:
+            # make lowercase
+            key = key.lower()
+
+        topic = f"homeassistant/button/mpp_{tag}_{key}"
+        payload = {
+            "name": orig_key,
+            "command_topic": topic,
+            "command":"get_setting",
+            "unique_id": f"mpp_{tag}_{key}",
+            "device":{
+                    "name": device_name,
+                    "identifiers": [device_id],
+                    "model": device_model,
+                    "manufacturer": device_manufacturer,
+                }
+        }
+        mqtt_broker = get_kwargs(kwargs, "mqtt_broker")
+
+        mqtt_broker.subscribe(topic, self.subscribed_topics)
+
+        msg = {"topic": topic, "payload": js.dumps(payload)}
+        return msg
+
     def build_msgs(self, *args, **kwargs):
         log.debug(f"kwargs {kwargs}")
         data = get_kwargs(kwargs, "data")
@@ -71,6 +129,8 @@ class hassd_mqtt(mqtt):
         # Build array of mqtt messages with hass update format
         config_msgs = []
         value_msgs = []
+
+        #config_msgs.append(self.send_extra(*args, **kwargs))
 
         # Loop through responses
         for key, values in data.items():
@@ -194,7 +254,7 @@ class hassd_mqtt(mqtt):
         return config_msgs, value_msgs
     
     def subscribed_topics(self, client, userdata, message):
-        print(message.payload.decode("utf-8"))
+        print(message.payload.decode("utf-8"), " - subs")
         self.extra_commands.append(message.payload.decode("utf-8"))
 
     def output(self, *args, **kwargs):

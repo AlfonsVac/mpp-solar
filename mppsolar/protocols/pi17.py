@@ -1,8 +1,10 @@
 import logging
+from datetime import datetime
 
 from .abstractprotocol import AbstractProtocol
 
 log = logging.getLogger("pi17")
+
 
 QUERY_COMMANDS = {
     "PI": {
@@ -373,7 +375,7 @@ QUERY_COMMANDS = {
                 "int",
                 "Generated Energy Total",
                 "kWh",
-                {"icon": "mdi:counter", "device-class": "energy", "state_class": "total"},
+                {"icon": "mdi:counter", "device-class": "energy", "state_class": "total"}
             ],
         ],
         "test_responses": [
@@ -474,6 +476,20 @@ QUERY_COMMANDS = {
         ],
         "regex": "EY(\\d\\d\\d\\d)$",
     },
+    "EYNOW": {
+        "name": "EYNOW",
+        "prefix": "^P010",
+        "description": "Query generated energy of year",
+        "help": " -- queries generated energy for the currnet year from the Inverter",
+        "type": "QUERYEN",
+        "response": [
+            ["int", "Generated Energy Year", "Wh", {"state_class": "total_increasing"}],
+        ],
+        "test_responses": [
+            b"^D01100006591\xba\x10\r",
+        ],
+        "alternative":f'EY{datetime.now().strftime("%Y")}'
+    },
     "EM": {
         "name": "EM",
         "prefix": "^P012",
@@ -487,6 +503,20 @@ QUERY_COMMANDS = {
             b"^D01000006591\xba\x10\r",
         ],
         "regex": "EM(\\d\\d\\d\\d\\d\\d)$",
+    },
+    "EMNOW": {
+        "name": 'EMNOW',
+        "prefix": "^P012",
+        "description": "Query generated energy of current month",
+        "help": " -- queries generated energy for the current month from the Inverter",
+        "type": "QUERYEN",
+        "response": [
+            ["int", "Generated Energy Month", "Wh", {"state_class": "total_increasing"}],
+        ],
+        "test_responses": [
+            b"^D01000006591\xba\x10\r",
+        ],
+        "alternative":f'EM{datetime.now().strftime("%Y%m")}',
     },
     "ED": {
         "name": "ED",
@@ -502,6 +532,20 @@ QUERY_COMMANDS = {
         ],
         "regex": "ED(\\d\\d\\d\\d\\d\\d\\d\\d)$",
     },
+    "EDNOW": {
+        "name": "EDNOW",
+        "prefix": "^P014",
+        "description": "Query generated energy of current day",
+        "help": " -- queries generated energy for the current day from the Inverter",
+        "type": "QUERYEN",
+        "response": [
+            ["int", "Generated Energy Day", "Wh", {"state_class": "total_increasing"}],
+        ],
+        "test_responses": [
+            b"^D009000091\xba\x10\r",
+        ],
+        "alternative":f'ED{datetime.now().strftime("%Y%m%d")}',
+    },
     "EH": {
         "name": "EH",
         "prefix": "^P016",
@@ -515,6 +559,20 @@ QUERY_COMMANDS = {
             b"^D008000001\xba\x10\r",
         ],
         "regex": "EH(\\d\\d\\d\\d\\d\\d\\d\\d\\d\\d)$",
+    },
+    "EHNOW": {
+        "name": "EHNOW",
+        "prefix": "^P016",
+        "description": "Query generated energy of current hour",
+        "help": " -- queries generated energy for the current hour from the Inverter",
+        "type": "QUERYEN",
+        "response": [
+            ["int", "Generated Energy Hour", "Wh", {"state_class": "total_increasing"}],
+        ],
+        "test_responses": [
+            b"^D008000001\xba\x10\r",
+        ],
+        "alternative":f'EH{datetime.now().strftime("%Y%m%d%H")}',
     },
 }
 
@@ -896,10 +954,8 @@ class pi17(AbstractProtocol):
         self.COMMANDS = QUERY_COMMANDS
         self.COMMANDS.update(SETTER_COMMANDS)
         # TODO fix these lists
-        self.STATUS_COMMANDS = []
-        self.SETTINGS_COMMANDS = [
-            "MD",
-        ]
+        self.STATUS_COMMANDS = ["PS", "GS", "WS", "ET", "EDNOW", "MOD"]
+        self.SETTINGS_COMMANDS = ["PIRI", "BATS", "DI", "FLAG"]
         self.DEFAULT_COMMAND = "PI"
         self.PID = "PI"
         self.ID_COMMANDS = ["PI", "DM"]
@@ -915,6 +971,10 @@ class pi17(AbstractProtocol):
         # End of required variables setting
         if self._command_defn is None:
             return None
+
+        if 'alternative' in self._command_defn:
+            print(self._command_defn)
+            self._command = self._command_defn["alternative"]
 
         _cmd = bytes(self._command, "utf-8")
         _type = self._command_defn["type"]
