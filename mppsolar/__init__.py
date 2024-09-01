@@ -168,6 +168,7 @@ def main():
             const="/etc/mpp-solar/mpp-solar.conf",
             default=None,
         )
+    parser.add_argument("-r", "--remote", action="store_true", help="Listen for remote commands from mqtt server")
     parser.add_argument("--daemon", action="store_true", help="Run as daemon")
     parser.add_argument("--getstatus", action="store_true", help="Get Inverter Status")
     parser.add_argument("--getsettings", action="store_true", help="Get Inverter Settings")
@@ -272,6 +273,7 @@ def main():
         pause = 60
 
     # If config file specified, process
+    remote = 0
     if args.configfile:
         import configparser
 
@@ -295,6 +297,7 @@ def main():
         mqtt_broker.update("port", config["SETUP"].getint("mqtt_port", fallback=None))
         mqtt_broker.update("username", config["SETUP"].get("mqtt_user", fallback=None))
         mqtt_broker.update("password", config["SETUP"].get("mqtt_pass", fallback=None))
+        remote = config["SETUP"].get("remote", fallback=None)
         sections.remove("SETUP")
 
         # Process 'command' sections
@@ -407,10 +410,78 @@ def main():
             _commands.append((device, command, tag, outputs, filter, excl_filter))
         log.debug(f"Commands {_commands}")
 
+
+        #Initialize Subscribe function
+    remote_commands = {'futurefuture':[], 'future':[], 'actual':[], 'delete':[]} #0- future future commands, 1- future commands,  2- commands, 3- comnads to delete
+    if args.remote or remote:
+        tag = "config"
+        if args.tag:
+            tag = args.tag
+        subs_topic = f"mpp_solar/{tag}/set"
+
+        def onRemoteMessage(client, userdata, message):
+
+            pairs = message.payload.decode("utf-8").split(',')
+            print(pairs[0].strip().split(":"))
+            commandMessage = {key: value for key, value in (pair.strip().split(":") for pair in pairs)}
+            print(commandMessage)
+
+            if 'future_command' in commandMessage.keys():
+                for command in commandMessage['future_command'].split('#'):
+                    remote_commands['futurefuture'].append(command)
+
+            if 'command' in commandMessage.keys():
+                for command in commandMessage['command'].split('#'):
+                    remote_commands['future'].append(command.strip())
+            
+            print(remote_commands)
+        
+        mqtt_broker.subscribe(subs_topic, onRemoteMessage)
+        print(f'Subscribed to topic: {subs_topic} on prefered MQTT server')
+        log.info(
+            f'Subscribed to topic: {subs_topic} on prefered MQTT server'
+        )
+    else:
+        pass
+
+    def updateCommands():
+        indexes = []
+        for index, command in enumerate(_commands):
+            if command[1] in remote_commands['delete']:
+                indexes.append(index)
+        
+        indexes.sort(reverse=True)
+
+        for index in indexes:
+            _commands.pop(index)
+
+        # if actual que is empty move to next iteration
+        if len(remote_commands["actual"]) == 0:
+            remote_commands["actual"] = remote_commands["future"]
+            remote_commands["future"] = remote_commands["futurefuture"]
+            remote_commands["futurefuture"] = []
+
+        # append actual commands to _commands
+        for command in remote_commands["actual"]:
+            _device, _command, _tag, _outputs, filter, excl_filter in _commands[0]
+            _commands.append((_device, command, _tag, _outputs, filter, excl_filter))
+
+        # move everything step forward
+        remote_commands["delete"] = remote_commands["actual"]
+        remote_commands["actual"] = remote_commands["future"]
+        remote_commands["future"] = remote_commands["futurefuture"]
+        remote_commands["futurefuture"] = []
+
+
     while True:
         # Loop through the configured commands
         if not args.daemon:
             log.info(f"Looping {len(_commands)} commands")
+
+        if args.remote or remote:
+            updateCommands()
+            pass
+        
         for _device, _command, _tag, _outputs, filter, excl_filter in _commands:
             # for item in mppUtilArray:
             # Tell systemd watchdog we are still alive
