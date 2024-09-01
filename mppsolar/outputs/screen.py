@@ -43,7 +43,7 @@ class screen(baseoutput):
             excl_filter = get_kwargs(kwargs, "excl_filter")
 
         if _filter is not None:
-            _filter = re.compile(filter)
+            _filter = re.compile(_filter)
         if excl_filter is not None:
             excl_filter = re.compile(excl_filter)
 
@@ -76,16 +76,16 @@ class screen(baseoutput):
         if maxP < 9:
             maxP = 9
         # maxV = getMaxLen(data.values())
-        print(f"{pad('Parameter', maxP+1)}{'Value':<15}\tUnit")
+        print(f"{pad('Parameter', maxP+1)}{'Value':<15}Unit")
         for key, values in displayData.items():
             try:
                 value = values[0]
                 unit = values[1]
                 if len(values) > 2 and values[2]:
                     extra = values[2]
-                    print(f"{pad(key,maxP+1)}{value:<15}\t{unit:<4}\t{extra}")
+                    print(f"{pad(key,maxP+1)}{value:<15}{unit:<6}{extra}")
                 else:
-                    print(f"{pad(key,maxP+1)}{value:<15}\t{unit:<4}")
+                    print(f"{pad(key,maxP+1)}{value:<15}{unit}")
             except TypeError:
                 log.info("unable to format for %s, %s, %s", key, value, unit)
 

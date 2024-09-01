@@ -1,14 +1,17 @@
 # !/usr/bin/python3
 import logging
+import time
 from argparse import ArgumentParser
 from platform import python_version
 
 from mppsolar.version import __version__  # noqa: F401
 
-from .helpers import get_device_class
-from .libs.mqttbrokerc import MqttBroker
-from .outputs import get_outputs, list_outputs
-from .protocols import list_protocols
+from mppsolar.helpers import get_device_class
+from mppsolar.daemon import get_daemon
+from mppsolar.daemon import DaemonType
+from mppsolar.libs.mqttbrokerc import MqttBroker
+from mppsolar.outputs import get_outputs, list_outputs
+from mppsolar.protocols import list_protocols
 
 # Set-up logger
 log = logging.getLogger("")
@@ -144,6 +147,14 @@ def main():
         default="http://localhost:9091/metrics/job/pushgateway",
     )
     parser.add_argument(
+        "--prom_output_dir",
+        help=(
+            "Output directory where Prometheus metrics are written as .prom files"
+            "(default: /var/lib/node_exporter)"
+        ),
+        default="/var/lib/node_exporter",
+    )
+    parser.add_argument(
         "-c",
         "--command",
         nargs="?",
@@ -252,25 +263,33 @@ def main():
     keep_case = args.keepcase
     mqtt_topic = args.mqtttopic
     push_url = args.pushurl
+    prom_output_dir = args.prom_output_dir
 
     _commands = []
+
     # Initialize Daemon
-    if args.daemon:
-        import time
+    if not args.daemon:
+        daemon = get_daemon(daemontype=DaemonType.DISABLED)
+    else:
+        daemon = get_daemon(daemontype=DaemonType.SYSTEMD)
+        daemon.keepalive = 60
+    log.info(daemon)
 
-        try:
-            import systemd.daemon
-        except ImportError:
-            print("You are missing dependencies in order to be able to use the --daemon flag.")
-            print("To install them, use that command:")
-            print("    python -m pip install 'mppsolar[systemd]'")
-            exit(1)
 
-        # Tell systemd that our service is ready
-        systemd.daemon.notify("READY=1")
-        print("Service Initializing ...")
-        # set some default-defaults
-        pause = 60
+    # if args.daemon:
+    #     try:
+    #         import systemd.daemon
+    #     except ImportError:
+    #         print("You are missing dependencies in order to be able to use the --daemon flag.")
+    #         print("To install them, use that command:")
+    #         print("    python -m pip install 'mppsolar[systemd]'")
+    #         exit(1)
+
+    # Tell systemd that our service is ready
+    daemon.initialize()
+    daemon.notify("Service Initializing ...")
+    # set some default-defaults
+    pause = 60
 
     # If config file specified, process
     remote = 0
@@ -318,6 +337,7 @@ def main():
             mongo_url = config[section].get("mongo_url", fallback=None)
             mongo_db = config[section].get("mongo_db", fallback=None)
             push_url = config[section].get("push_url", fallback=push_url)
+            prom_output_dir = config[section].get("prom_output_dir", fallback=prom_output_dir)
             mqtt_topic = config[section].get("mqtt_topic", fallback=mqtt_topic)
             #
             device_class = get_device_class(_type)
@@ -336,6 +356,7 @@ def main():
                 mongo_url=mongo_url,
                 mongo_db=mongo_db,
                 push_url=push_url,
+                prom_output_dir=prom_output_dir,
             )
             # build array of commands
             commands = _command.split("#")
@@ -375,6 +396,7 @@ def main():
             mongo_url=mongo_url,
             mongo_db=mongo_db,
             push_url=push_url,
+            prom_output_dir=prom_output_dir,
         )
         #
 
@@ -485,15 +507,9 @@ def main():
         for _device, _command, _tag, _outputs, filter, excl_filter in _commands:
             # for item in mppUtilArray:
             # Tell systemd watchdog we are still alive
-            if args.daemon:
-                systemd.daemon.notify("WATCHDOG=1")
-                print(
-                    f"Getting results from device: {_device} for command: {_command}, tag: {_tag}, outputs: {_outputs}"
-                )
-            else:
-                log.info(
-                    f"Getting results from device: {_device} for command: {_command}, tag: {_tag}, outputs: {_outputs}"
-                )
+            daemon.watchdog()
+            daemon.notify(f"Getting results from device: {_device} for command: {_command}, tag: {_tag}, outputs: {_outputs}")
+            log.info(f"Getting results from device: {_device} for command: {_command}, tag: {_tag}, outputs: {_outputs}")
             results = _device.run_command(command=_command)
             log.debug(f"results: {results}")
             # send to output processor(s)
@@ -503,7 +519,7 @@ def main():
                 # eg QDI run, Display Inverter Default Settings
                 log.debug(f"Using output filter: {filter}")
                 op.output(
-                    data=results,
+                    data=results.copy(),
                     tag=_tag,
                     name=_device._name,
                     mqtt_broker=mqtt_broker,
@@ -512,6 +528,7 @@ def main():
                     mongo_url=mongo_url,
                     mongo_db=mongo_db,
                     push_url=push_url,
+                    prom_output_dir=prom_output_dir,
                     # mqtt_port=mqtt_port,
                     # mqtt_user=mqtt_user,
                     # mqtt_pass=mqtt_pass,
@@ -522,7 +539,7 @@ def main():
                 )
                 # Tell systemd watchdog we are still alive
         if args.daemon:
-            systemd.daemon.notify("WATCHDOG=1")
+            daemon.watchdog()
             print(f"Sleeping for {pause} sec")
             time.sleep(pause)
         else:
