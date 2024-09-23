@@ -63,9 +63,14 @@ class hassd_mqtt(mqtt):
             excl_filter = re.compile(excl_filter)
         if tag is None:
             if command:
-                tag = command
+                # if sending hour timedependent, command, then use only first letters
+                if command[:2] in ["EH", "ED"]:
+                    tag = command[:2]
+                else:
+                    tag = command
             else:
                 tag = "mppsolar"
+        
 
         # Build array of mqtt messages with hass update format
         config_msgs = []
@@ -73,6 +78,10 @@ class hassd_mqtt(mqtt):
 
         # Loop through responses
         for key, values in data.items():
+            #if key not string ignore data input
+            if not isinstance(key, str):
+                continue
+
             orig_key = key
             value = values[0]
             unit = values[1]

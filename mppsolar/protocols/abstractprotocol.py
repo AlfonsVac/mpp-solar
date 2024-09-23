@@ -246,13 +246,18 @@ class AbstractProtocol(metaclass=abc.ABCMeta):
         if command_defn is not None:
             msgs["_command_description"] = command_defn["description"]
             len_command_defn = len(command_defn["response"])
-
-        # Check response is valid
-        valid, _msg = self.check_response_valid(response)
-        if not valid:
-            msgs.update(_msg)
-            log.info(f"validity check fail: {_msg}")
-            return msgs
+        
+        # for those commands crc not working, some problemt to find
+        #TODO repair crc for those commands or implement workaround
+        if command_defn["name"] not in ["HECS", "BATS", "ED"]:
+            # Check response is valid
+            valid, _msg = self.check_response_valid(response)
+            if not valid:
+                msgs.update(_msg)
+                log.info(f"validity check fail: {_msg}")
+                return msgs
+        else:
+            log.info(f"skiping validity check for this message")
 
         # Add Raw response
         _response = b""

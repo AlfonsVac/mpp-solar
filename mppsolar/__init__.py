@@ -443,7 +443,7 @@ def main():
 
         def onRemoteMessage(client, userdata, message):
 
-            pairs = message.payload.decode("utf-8").split(',')
+            pairs = message.payload.decode("utf-8").split(';')
             print(pairs[0].strip().split(":"))
             commandMessage = {key: value for key, value in (pair.strip().split(":") for pair in pairs)}
             print(commandMessage)
@@ -508,6 +508,7 @@ def main():
             # for item in mppUtilArray:
             # Tell systemd watchdog we are still alive
             daemon.watchdog()
+            print(f"Getting results for command: {_command}")
             daemon.notify(f"Getting results from device: {_device} for command: {_command}, tag: {_tag}, outputs: {_outputs}")
             log.info(f"Getting results from device: {_device} for command: {_command}, tag: {_tag}, outputs: {_outputs}")
             results = _device.run_command(command=_command)
