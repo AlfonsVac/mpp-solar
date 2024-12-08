@@ -3,6 +3,7 @@ import logging
 import time
 from argparse import ArgumentParser
 from platform import python_version
+import os
 
 from mppsolar.version import __version__  # noqa: F401
 
@@ -453,10 +454,13 @@ def main():
                     remote_commands['futurefuture'].append(command)
 
             if 'command' in commandMessage.keys():
-                for command in commandMessage['command'].split('#'):
-                    remote_commands['future'].append(command.strip())
+                if 'restart' == commandMessage['command']:
+                    os.system("systemctl --user restart mpp-solar.service")
+                else:
+                    for command in commandMessage['command'].split('#'):
+                        remote_commands['future'].append(command.strip())
             
-            print(remote_commands)
+            
         
         mqtt_broker.subscribe(subs_topic, onRemoteMessage)
         print(f'Subscribed to topic: {subs_topic} on prefered MQTT server')

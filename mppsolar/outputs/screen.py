@@ -58,9 +58,9 @@ class screen(baseoutput):
         displayData = {}
         for key, _values in data.items():
             # remove spaces
-            if remove_spaces:
+            if remove_spaces and type(key) == str:
                 key = key.replace(" ", "_")
-            if not keep_case:
+            if not keep_case and type(key) == str:
                 # make lowercase
                 key = key.lower()
             if key_wanted(key, _filter, excl_filter):
